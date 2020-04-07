@@ -12,6 +12,7 @@ using Grpc.AspNetCore.Server;
 using Grpc.AspNetCore.Server.Model;
 using Grpc.Core;
 using Grpc.Shared.Server;
+using Microsoft.AspNetCore.Grpc.HttpApi.Internal;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Patterns;
 using Microsoft.Extensions.Logging;
@@ -89,7 +90,8 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
                 }
                 else
                 {
-                    AddMethodCore(method, method.FullName, "GET", string.Empty, string.Empty, methodDescriptor);
+                    // Consider setting to enable mapping to methods without HttpRule
+                    // AddMethodCore(method, method.FullName, "GET", string.Empty, string.Empty, methodDescriptor);
                 }
             }
             else
@@ -102,9 +104,9 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
             where TRequest : class
             where TResponse : class
         {
-            if (TryResolvePattern(httpRule, out var pattern, out var httpVerb))
+            if (HttpRuleHelpers.TryResolvePattern(httpRule, out var pattern, out var httpVerb))
             {
-                AddMethodCore(method, pattern, httpVerb, httpRule.Body, httpRule.ResponseBody, methodDescriptor);
+                AddMethodCore(method, httpRule, pattern, httpVerb, httpRule.Body, httpRule.ResponseBody, methodDescriptor);
             }
 
             foreach (var additionalRule in httpRule.AdditionalBindings)
@@ -115,6 +117,7 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
 
         private void AddMethodCore<TRequest, TResponse>(
             Method<TRequest, TResponse> method,
+            HttpRule httpRule,
             string pattern,
             string httpVerb,
             string body,
@@ -135,11 +138,14 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
                 var (invoker, metadata) = CreateModelCore<UnaryServerMethod<TService, TRequest, TResponse>>(
                     method.Name,
                     new[] { typeof(TRequest), typeof(ServerCallContext) },
-                    httpVerb);
+                    httpVerb,
+                    httpRule,
+                    methodDescriptor);
 
                 var methodContext = global::Grpc.Shared.Server.MethodOptions.Create(new[] { _globalOptions, _serviceOptions });
 
-                var routeParameterDescriptors = ResolveRouteParameterDescriptors(pattern, methodDescriptor.InputType);
+                var routePattern = RoutePatternFactory.Parse(pattern);
+                var routeParameterDescriptors = HttpRuleHelpers.ResolveRouteParameterDescriptors(routePattern, methodDescriptor.InputType);
 
                 MessageDescriptor? bodyDescriptor = null;
                 List<FieldDescriptor>? bodyFieldDescriptors = null;
@@ -190,30 +196,12 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
                     bodyFieldDescriptors,
                     routeParameterDescriptors);
 
-                _context.AddMethod<TRequest, TResponse>(method, RoutePatternFactory.Parse(pattern), metadata, unaryServerCallHandler.HandleCallAsync);
+                _context.AddMethod<TRequest, TResponse>(method, routePattern, metadata, unaryServerCallHandler.HandleCallAsync);
             }
             catch (Exception ex)
             {
                 throw new InvalidOperationException($"Error binding {method.Name} on {typeof(TService).Name} to HTTP API.", ex);
             }
-        }
-
-        private static Dictionary<string, List<FieldDescriptor>> ResolveRouteParameterDescriptors(string pattern, MessageDescriptor messageDescriptor)
-        {
-            var routePattern = RoutePatternFactory.Parse(pattern);
-
-            var routeParameterDescriptors = new Dictionary<string, List<FieldDescriptor>>(StringComparer.Ordinal);
-            foreach (var routeParameter in routePattern.Parameters)
-            {
-                if (!ServiceDescriptorHelpers.TryResolveDescriptors(messageDescriptor, routeParameter.Name, out var fieldDescriptors))
-                {
-                    throw new InvalidOperationException($"Couldn't find matching field for route parameter '{routeParameter.Name}' on {messageDescriptor.Name}.");
-                }
-
-                routeParameterDescriptors.Add(routeParameter.Name, fieldDescriptors);
-            }
-
-            return routeParameterDescriptors;
         }
 
         private bool TryGetMethodDescriptor(string methodName, [NotNullWhen(true)]out MethodDescriptor? methodDescriptor)
@@ -234,42 +222,7 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
 #pragma warning restore CS0618 // Type or member is obsolete
         }
 
-        private bool TryResolvePattern(HttpRule http, [NotNullWhen(true)]out string? pattern, [NotNullWhen(true)]out string? verb)
-        {
-            switch (http.PatternCase)
-            {
-                case HttpRule.PatternOneofCase.Get:
-                    pattern = http.Get;
-                    verb = "GET";
-                    return true;
-                case HttpRule.PatternOneofCase.Put:
-                    pattern = http.Put;
-                    verb = "PUT";
-                    return true;
-                case HttpRule.PatternOneofCase.Post:
-                    pattern = http.Post;
-                    verb = "POST";
-                    return true;
-                case HttpRule.PatternOneofCase.Delete:
-                    pattern = http.Delete;
-                    verb = "DELETE";
-                    return true;
-                case HttpRule.PatternOneofCase.Patch:
-                    pattern = http.Patch;
-                    verb = "PATCH";
-                    return true;
-                case HttpRule.PatternOneofCase.Custom:
-                    pattern = http.Custom.Path;
-                    verb = http.Custom.Kind;
-                    return true;
-                default:
-                    pattern = null;
-                    verb = null;
-                    return false;
-            }
-        }
-
-        private (TDelegate invoker, List<object> metadata) CreateModelCore<TDelegate>(string methodName, Type[] methodParameters, string verb) where TDelegate : Delegate
+        private (TDelegate invoker, List<object> metadata) CreateModelCore<TDelegate>(string methodName, Type[] methodParameters, string verb, HttpRule httpRule, MethodDescriptor methodDescriptor) where TDelegate : Delegate
         {
             var handlerMethod = GetMethod(methodName, methodParameters);
 
@@ -285,6 +238,8 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
             metadata.AddRange(typeof(TService).GetCustomAttributes(inherit: true));
             // Add method metadata last so it has a higher priority
             metadata.AddRange(handlerMethod.GetCustomAttributes(inherit: true));
+            metadata.Add(httpRule);
+            metadata.Add(methodDescriptor);
             metadata.Add(new HttpMethodMetadata(new[] { verb }));
 
             return (invoker, metadata);

@@ -14,14 +14,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\Shared\BindMethodFinder.cs" Link="Internal\BindMethodFinder.cs" />
-    <Compile Include="..\Shared\ClientStreamingServerMethodInvoker.cs" Link="Internal\ClientStreamingServerMethodInvoker.cs" />
-    <Compile Include="..\Shared\DuplexStreamingServerMethodInvoker.cs" Link="Internal\DuplexStreamingServerMethodInvoker.cs" />
-    <Compile Include="..\Shared\InterceptorPipelineBuilder.cs" Link="Internal\InterceptorPipelineBuilder.cs" />
-    <Compile Include="..\Shared\MethodOptions.cs" Link="Internal\MethodOptions.cs" />
-    <Compile Include="..\Shared\ServerMethodInvokerBase.cs" Link="Internal\ServerMethodInvokerBase.cs" />
-    <Compile Include="..\Shared\ServerStreamingServerMethodInvoker.cs" Link="Internal\ServerStreamingServerMethodInvoker.cs" />
-    <Compile Include="..\Shared\UnaryServerMethodInvoker.cs" Link="Internal\UnaryServerMethodInvoker.cs" />
+    <Compile Include="..\Shared\BindMethodFinder.cs" Link="Internal\Shared\BindMethodFinder.cs" />
+    <Compile Include="..\Shared\ClientStreamingServerMethodInvoker.cs" Link="Internal\Shared\ClientStreamingServerMethodInvoker.cs" />
+    <Compile Include="..\Shared\DuplexStreamingServerMethodInvoker.cs" Link="Internal\Shared\DuplexStreamingServerMethodInvoker.cs" />
+    <Compile Include="..\Shared\InterceptorPipelineBuilder.cs" Link="Internal\Shared\InterceptorPipelineBuilder.cs" />
+    <Compile Include="..\Shared\MethodOptions.cs" Link="Internal\Shared\MethodOptions.cs" />
+    <Compile Include="..\Shared\ServerMethodInvokerBase.cs" Link="Internal\Shared\ServerMethodInvokerBase.cs" />
+    <Compile Include="..\Shared\ServerStreamingServerMethodInvoker.cs" Link="Internal\Shared\ServerStreamingServerMethodInvoker.cs" />
+    <Compile Include="..\Shared\UnaryServerMethodInvoker.cs" Link="Internal\Shared\UnaryServerMethodInvoker.cs" />
 
     <Protobuf Include="Internal\Protos\errors.proto" />
   </ItemGroup>
