@@ -22,9 +22,6 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
 {
     internal class HttpApiProviderServiceBinder<TService> : ServiceBinderBase where TService : class
     {
-        // Protobuf id of the HttpRule field
-        private const int HttpRuleFieldId = 72295728;
-
         private readonly ServiceMethodProviderContext<TService> _context;
         private readonly Type _declaringType;
         private readonly ServiceDescriptor _serviceDescriptor;
@@ -57,7 +54,7 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
         public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, ClientStreamingServerMethod<TRequest, TResponse> handler)
         {
             if (TryGetMethodDescriptor(method.Name, out var methodDescriptor) &&
-                TryGetHttpRule(methodDescriptor, out _))
+                ServiceDescriptorHelpers.TryGetHttpRule(methodDescriptor, out _))
             {
                 Log.StreamingMethodNotSupported(_logger, method.Name, typeof(TService));
             }
@@ -66,7 +63,7 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
         public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, DuplexStreamingServerMethod<TRequest, TResponse> handler)
         {
             if (TryGetMethodDescriptor(method.Name, out var methodDescriptor) &&
-                TryGetHttpRule(methodDescriptor, out _))
+                ServiceDescriptorHelpers.TryGetHttpRule(methodDescriptor, out _))
             {
                 Log.StreamingMethodNotSupported(_logger, method.Name, typeof(TService));
             }
@@ -75,7 +72,7 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
         public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, ServerStreamingServerMethod<TRequest, TResponse> handler)
         {
             if (TryGetMethodDescriptor(method.Name, out var methodDescriptor) &&
-                TryGetHttpRule(methodDescriptor, out _))
+                ServiceDescriptorHelpers.TryGetHttpRule(methodDescriptor, out _))
             {
                 Log.StreamingMethodNotSupported(_logger, method.Name, typeof(TService));
             }
@@ -85,7 +82,7 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
         {
             if (TryGetMethodDescriptor(method.Name, out var methodDescriptor))
             {
-                if (TryGetHttpRule(methodDescriptor, out var httpRule))
+                if (ServiceDescriptorHelpers.TryGetHttpRule(methodDescriptor, out var httpRule))
                 {
                     ProcessHttpRule(method, methodDescriptor, httpRule);
                 }
@@ -183,18 +180,6 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
             return (methodDescriptor != null);
         }
 
-        private bool TryGetHttpRule(MethodDescriptor methodDescriptor, [NotNullWhen(true)]out HttpRule? httpRule)
-        {
-            // CustomOptions is obsolete
-            // We can use `methodDescriptor.GetOption(AnnotationsExtensions.Http)` but there
-            // is an error thrown when there is no option on the method.
-            // TODO(JamesNK): Remove obsolete code when issue is fixed. https://github.com/protocolbuffers/protobuf/issues/7127
-
-#pragma warning disable CS0618 // Type or member is obsolete
-            return methodDescriptor.CustomOptions.TryGetMessage<HttpRule>(HttpRuleFieldId, out httpRule);
-#pragma warning restore CS0618 // Type or member is obsolete
-        }
-
         private (TDelegate invoker, List<object> metadata) CreateModelCore<TDelegate>(string methodName, Type[] methodParameters, string verb, HttpRule httpRule, MethodDescriptor methodDescriptor) where TDelegate : Delegate
         {
             var handlerMethod = GetMethod(methodName, methodParameters);
@@ -211,9 +196,11 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
             metadata.AddRange(typeof(TService).GetCustomAttributes(inherit: true));
             // Add method metadata last so it has a higher priority
             metadata.AddRange(handlerMethod.GetCustomAttributes(inherit: true));
-            metadata.Add(httpRule);
-            metadata.Add(methodDescriptor);
             metadata.Add(new HttpMethodMetadata(new[] { verb }));
+
+            // Add protobuf service method descriptor.
+            // Is used by swagger generation to identify gRPC HTTP APIs.
+            metadata.Add(methodDescriptor);
 
             return (invoker, metadata);
         }

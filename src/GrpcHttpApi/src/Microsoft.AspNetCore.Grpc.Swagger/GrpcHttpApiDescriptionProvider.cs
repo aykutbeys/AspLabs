@@ -9,6 +9,7 @@ using Google.Protobuf.Reflection;
 using Grpc.AspNetCore.Server;
 using Grpc.Shared.HttpApi;
 using Microsoft.AspNetCore.Grpc.HttpApi.Internal;
+using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
@@ -54,18 +55,22 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
                 if (endpoint is RouteEndpoint routeEndpoint)
                 {
                     var grpcMetadata = endpoint.Metadata.GetMetadata<GrpcMethodMetadata>();
-                    var httpRule = endpoint.Metadata.GetMetadata<HttpRule>();
                     var methodDescriptor = endpoint.Metadata.GetMetadata<MethodDescriptor>();
-                    if (grpcMetadata != null && httpRule != null && methodDescriptor != null)
+
+                    if (grpcMetadata != null &&
+                        methodDescriptor != null &&
+                        ServiceDescriptorHelpers.TryGetHttpRule(methodDescriptor, out var httpRule))
                     {
                         if (ServiceDescriptorHelpers.TryResolvePattern(httpRule, out var pattern, out var verb))
                         {
                             var apiDescription = new ApiDescription();
                             apiDescription.HttpMethod = verb;
-                            apiDescription.ActionDescriptor = new Mvc.Abstractions.ActionDescriptor
+                            apiDescription.ActionDescriptor = new ActionDescriptor
                             {
                                 RouteValues = new Dictionary<string, string>
                                 {
+                                    // Swagger uses this to group endpoints together.
+                                    // Group methods together using the service name.
                                     ["controller"] = methodDescriptor.Service.FullName
                                 }
                             };
@@ -90,7 +95,8 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
                                 {
                                     Name = routeParameter.Key,
                                     //ModelMetadata = new GrpcModelMetadata(ModelMetadataIdentity.ForType(ResolveFieldType(field))),
-                                    Source = BindingSource.Path
+                                    Source = BindingSource.Path,
+                                    DefaultValue = string.Empty
                                 });
                             }
 
