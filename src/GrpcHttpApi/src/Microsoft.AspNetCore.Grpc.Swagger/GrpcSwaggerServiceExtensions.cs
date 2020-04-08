@@ -3,9 +3,8 @@
 
 using System;
 using Microsoft.AspNetCore.Grpc.HttpApi;
-using Grpc.AspNetCore.Server.Model;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Microsoft.Extensions.DependencyInjection
 {
