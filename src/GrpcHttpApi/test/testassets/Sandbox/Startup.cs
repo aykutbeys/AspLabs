@@ -13,13 +13,16 @@ namespace Server
     {
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddGrpc();
             services.AddGrpcHttpApi();
-            services.AddGrpcSwagger();
 
+            #region Secret
+            services.AddGrpcSwagger();
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "My API", Version = "v1" });
             });
+            #endregion
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -29,16 +32,13 @@ namespace Server
                 app.UseDeveloperExceptionPage();
             }
 
-            // For static content
-            app.UseHttpsRedirection();
-            app.UseDefaultFiles();
-            app.UseStaticFiles();
-
+            #region Secret
             app.UseSwagger();
             app.UseSwaggerUI(c =>
             {
                 c.SwaggerEndpoint("/swagger/v1/swagger.json", "My API V1");
             });
+            #endregion
 
             app.UseRouting();
 

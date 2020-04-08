@@ -11,6 +11,7 @@ using Google.Protobuf.Reflection;
 using Grpc.AspNetCore.Server;
 using Grpc.AspNetCore.Server.Model;
 using Grpc.Core;
+using Grpc.Shared.HttpApi;
 using Grpc.Shared.Server;
 using Microsoft.AspNetCore.Grpc.HttpApi.Internal;
 using Microsoft.AspNetCore.Routing;
@@ -104,7 +105,7 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
             where TRequest : class
             where TResponse : class
         {
-            if (HttpRuleHelpers.TryResolvePattern(httpRule, out var pattern, out var httpVerb))
+            if (ServiceDescriptorHelpers.TryResolvePattern(httpRule, out var pattern, out var httpVerb))
             {
                 AddMethodCore(method, httpRule, pattern, httpVerb, httpRule.Body, httpRule.ResponseBody, methodDescriptor);
             }
@@ -145,37 +146,9 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
                 var methodContext = global::Grpc.Shared.Server.MethodOptions.Create(new[] { _globalOptions, _serviceOptions });
 
                 var routePattern = RoutePatternFactory.Parse(pattern);
-                var routeParameterDescriptors = HttpRuleHelpers.ResolveRouteParameterDescriptors(routePattern, methodDescriptor.InputType);
+                var routeParameterDescriptors = ServiceDescriptorHelpers.ResolveRouteParameterDescriptors(routePattern, methodDescriptor.InputType);
 
-                MessageDescriptor? bodyDescriptor = null;
-                List<FieldDescriptor>? bodyFieldDescriptors = null;
-                var bodyDescriptorRepeated = false;
-                if (!string.IsNullOrEmpty(body))
-                {
-                    if (!string.Equals(body, "*", StringComparison.Ordinal))
-                    {
-                        if (!ServiceDescriptorHelpers.TryResolveDescriptors(methodDescriptor.InputType, body, out bodyFieldDescriptors))
-                        {
-                            throw new InvalidOperationException($"Couldn't find matching field for body '{body}' on {methodDescriptor.InputType.Name}.");
-                        }
-                        var leafDescriptor = bodyFieldDescriptors.Last();
-                        if (leafDescriptor.IsRepeated)
-                        {
-                            // A repeating field isn't a message type. The JSON parser will parse using the containing
-                            // type to get the repeating collection.
-                            bodyDescriptor = leafDescriptor.ContainingType;
-                            bodyDescriptorRepeated = true;
-                        }
-                        else
-                        {
-                            bodyDescriptor = leafDescriptor.MessageType;
-                        }
-                    }
-                    else
-                    {
-                        bodyDescriptor = methodDescriptor.InputType;
-                    }
-                }
+                ServiceDescriptorHelpers.ResolveBodyDescriptor(body, methodDescriptor, out var bodyDescriptor, out var bodyFieldDescriptors, out var bodyDescriptorRepeated);
 
                 FieldDescriptor? responseBodyDescriptor = null;
                 if (!string.IsNullOrEmpty(responseBody))

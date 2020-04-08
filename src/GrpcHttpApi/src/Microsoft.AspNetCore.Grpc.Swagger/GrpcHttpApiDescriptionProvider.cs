@@ -7,6 +7,7 @@ using System.Linq;
 using Google.Api;
 using Google.Protobuf.Reflection;
 using Grpc.AspNetCore.Server;
+using Grpc.Shared.HttpApi;
 using Microsoft.AspNetCore.Grpc.HttpApi.Internal;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -57,7 +58,7 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
                     var methodDescriptor = endpoint.Metadata.GetMetadata<MethodDescriptor>();
                     if (grpcMetadata != null && httpRule != null && methodDescriptor != null)
                     {
-                        if (HttpRuleHelpers.TryResolvePattern(httpRule, out var pattern, out var verb))
+                        if (ServiceDescriptorHelpers.TryResolvePattern(httpRule, out var pattern, out var verb))
                         {
                             var apiDescription = new ApiDescription();
                             apiDescription.HttpMethod = verb;
@@ -77,13 +78,9 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
                                 StatusCode = 200
                             });
 
-                            var messageSchemaGenerator = new MessageSchemaGenerator(methodDescriptor.OutputType);
-                            if (!_swaggerGeneratorOptions.CustomTypeMappings.ContainsKey(methodDescriptor.OutputType.ClrType))
-                            {
-                                _swaggerGeneratorOptions.CustomTypeMappings[methodDescriptor.OutputType.ClrType] = messageSchemaGenerator.GenerateSchema;
-                            }
+                            AddSchemaGeneratorOverride(methodDescriptor.OutputType);
 
-                            var routeParameters = HttpRuleHelpers.ResolveRouteParameterDescriptors(routeEndpoint.RoutePattern, methodDescriptor.InputType);
+                            var routeParameters = ServiceDescriptorHelpers.ResolveRouteParameterDescriptors(routeEndpoint.RoutePattern, methodDescriptor.InputType);
 
                             foreach (var routeParameter in routeParameters)
                             {
@@ -97,6 +94,19 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
                                 });
                             }
 
+                            ServiceDescriptorHelpers.ResolveBodyDescriptor(httpRule.Body, methodDescriptor, out var bodyDescriptor, out var bodyFieldDescriptors, out var bodyDescriptorRepeated);
+                            if (bodyDescriptor != null)
+                            {
+                                AddSchemaGeneratorOverride(bodyDescriptor);
+
+                                apiDescription.ParameterDescriptions.Add(new ApiParameterDescription
+                                {
+                                    Name = "Input",
+                                    ModelMetadata = new GrpcModelMetadata(ModelMetadataIdentity.ForType(bodyDescriptor.ClrType)),
+                                    Source = BindingSource.Body
+                                });
+                            }
+
                             descriptions.Add(apiDescription);
                         }
                     }
@@ -107,6 +117,15 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
             groups.Add(new ApiDescriptionGroup("Test", descriptions));
 
             return new ApiDescriptionGroupCollection(groups, 1);
+        }
+
+        private void AddSchemaGeneratorOverride(MessageDescriptor messageDescriptor)
+        {
+            var messageSchemaGenerator = new MessageSchemaGenerator(messageDescriptor);
+            if (!_swaggerGeneratorOptions.CustomTypeMappings.ContainsKey(messageDescriptor.ClrType))
+            {
+                _swaggerGeneratorOptions.CustomTypeMappings[messageDescriptor.ClrType] = messageSchemaGenerator.GenerateSchema;
+            }
         }
 
         private class MessageSchemaGenerator
@@ -175,49 +194,5 @@ namespace Microsoft.AspNetCore.Grpc.HttpApi
                     throw new InvalidOperationException("Unexpected field type: " + field.FieldType);
             }
         }
-    }
-
-    internal class GrpcModelMetadata : ModelMetadata
-    {
-        public GrpcModelMetadata(ModelMetadataIdentity identity) : base(identity)
-        {
-        }
-
-        public override IReadOnlyDictionary<object, object> AdditionalValues { get; }
-        public override string BinderModelName { get; }
-        public override Type BinderType { get; }
-        public override BindingSource BindingSource { get; }
-        public override bool ConvertEmptyStringToNull { get; }
-        public override string DataTypeName { get; }
-        public override string Description { get; }
-        public override string DisplayFormatString { get; }
-        public override string DisplayName { get; }
-        public override string EditFormatString { get; }
-        public override ModelMetadata ElementMetadata { get; }
-        public override IEnumerable<KeyValuePair<EnumGroupAndName, string>> EnumGroupedDisplayNamesAndValues { get; }
-        public override IReadOnlyDictionary<string, string> EnumNamesAndValues { get; }
-        public override bool HasNonDefaultEditFormat { get; }
-        public override bool HideSurroundingHtml { get; }
-        public override bool HtmlEncode { get; }
-        public override bool IsBindingAllowed { get; }
-        public override bool IsBindingRequired { get; }
-        public override bool IsEnum { get; }
-        public override bool IsFlagsEnum { get; }
-        public override bool IsReadOnly { get; }
-        public override bool IsRequired { get; }
-        public override ModelBindingMessageProvider ModelBindingMessageProvider { get; }
-        public override string NullDisplayText { get; }
-        public override int Order { get; }
-        public override string Placeholder { get; }
-        public override ModelPropertyCollection Properties { get; }
-        public override IPropertyFilterProvider PropertyFilterProvider { get; }
-        public override Func<object, object> PropertyGetter { get; }
-        public override Action<object, object> PropertySetter { get; }
-        public override bool ShowForDisplay { get; }
-        public override bool ShowForEdit { get; }
-        public override string SimpleDisplayProperty { get; }
-        public override string TemplateHint { get; }
-        public override bool ValidateChildren { get; }
-        public override IReadOnlyList<object> ValidatorMetadata { get; }
     }
 }
